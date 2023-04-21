@@ -2,11 +2,44 @@ import socket
 import threading
 import sys 
 import argparse
+import time
+import hashlib
+import logging
 
 # used to enable debugging print statements
 verbosity = 1
 
+logging.basicConfig(filename="logs.log", format="%(message)s", filemode="a")
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+# USE: logger.info("Your message") to add a line in the log
+
+# file hash function copied from https://www.programiz.com/python-programming/examples/hash-file
+def hash_file(filename):
+   """"This function returns the SHA-1 hash
+   of the file passed into it"""
+
+   # make a hash object
+   h = hashlib.sha1()
+
+   # open file for reading in binary mode
+   with open(filename,'rb') as file:
+       
+       # loop till the end of the file
+       chunk = 0
+       while chunk != b'':
+           # read only 1024 bytes at a time
+           chunk = file.read(1024)
+           h.update(chunk)
+
+   # return the hex representation of digest
+   return h.hexdigest()
+
 # Use sys.stdout.flush() after print statemtents
+
+# function that frequently asks server for information regarding missing chunks
+def find_missing_chunk():
+    pass
 
 if __name__== "__main__":
     # parse command line arguments
@@ -48,46 +81,46 @@ if __name__== "__main__":
     except socket.err as err:
         print("Connection to server was uunsuccesful")
         sys.stdout.flush()
+    
+    # dict to store information related to each chunk and where to find it
+    # { INDEX : OWN or }
+    CHUNKS_OWNED = 0 # number of chunks owned by this user
+    chunk_info = {}
 
     # send all chunk info to P2P Tracker
     # create file object
     reader = open(f'{PATH}/local_chunks.txt', "rb")
 
-    # go to last line of file and find the number of chunks in the file
-    # reader.seek(-9, 2)
-    # try:
-    #     while(reader.read(1) != b'\n'):
-    #         reader.seek(-2, 1)
-    # except err:
-    #     reader.seek(0)
-    #     print("Error finding last line of file")
-
-    # NUM_CUNKS = int((reader.readline().decode()).split(',')[0])
-    
     # read the first line
     chunk = reader.readline().decode().strip('\n').split(',')
 
     # send each chunk to server
     while(chunk[1] != 'LASTCHUNK'):
+
+        filename = chunk[1].strip('\r')
+        # calculate the hash of the file
+        file_hash_value = hash_file(f'{PATH}/{filename}')
+        
         # create fstring with proper LOCAL_CHUNK type format
-        cmd = f'LOCAL_CHUNKS,{chunk[0]},{hash(chunk[1])},{IP_ADDR},{MY_PORT}\n'
+        cmd = f'LOCAL_CHUNKS,{chunk[0]},{file_hash_value},{IP_ADDR},{MY_PORT}'
         
         # send each chunk to P2P Tracker
-        clientSocket.send(cmd.encode()) 
+        clientSocket.send(bytes(cmd, 'utf-8')) 
+
+        # log action
+        log_text = f'{NAME},LOCAL_CHUNKS,{chunk[0]},{file_hash_value},{IP_ADDR},{MY_PORT}'
+        logger.info(log_text)
 
         if (verbosity): 
             print(f'sent: {cmd}') # debug print statement
 
-        # wait for an ACK before sending next line
-        # this avoids overwhelming P2P server
-        while (clientSocket.recv(1024).decode() != 'ACK'):
-            continue
+        # waits before sending next line to avoids overwhelming P2P server
+        time.sleep(1)
 
         chunk = reader.readline().decode().strip('\n').split(',')
 
     # total number of chunks over the entire file_set
     NUM_CHUNKS = int(chunk[0])
-    print(NUM_CHUNKS)
 
     # bind peer socket to localhost IP and transfer port
     try:
@@ -95,5 +128,10 @@ if __name__== "__main__":
     except socket.err as err:
         print("Socket binding failed")
         sys.stdout.flush()
+
+    peerSocket.listen()
+
+    while True:
+        transmitSocket, peerAddress = peerSocket.accept()
 
     
