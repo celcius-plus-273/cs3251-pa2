@@ -2,9 +2,16 @@ import socket
 import threading
 import sys 
 import argparse
+import logging
+import time
+import random
 
 # used to enable debugging print statements
-verbosity = 0
+verbosity = 1
+
+logging.basicConfig(filename="logs.log", format="%(message)s", filemode="a")
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
 
 # Use sys.stdout.flush() after print statemtents
 
@@ -12,18 +19,18 @@ verbosity = 0
 def user(clientSocket, checkList, chunkList, listLock):
     while True:
         # receives an incoming input from a user
-        message = clientSocket.recv(1024).decode().strip('\n')
-        if (message == ''):
-            break
+        message = clientSocket.recv(1024)
+        
+        if (message == b''):
+            # if nothing is being sent from host just continue looping
+            time.sleep(0.5)
+            continue
         
         if (verbosity):
             print(f'received: {message}')
 
-        # ACK received message 
-        clientSocket.send('ACK'.encode())
-
         # decodes the message according to its type (LOCAL_CHUNKS or WHERE_CHUNK)
-        decoded_message = message.split(',')
+        decoded_message = str(message, 'utf-8').split(',')
         cmd = decoded_message[0]
         if (cmd == 'LOCAL_CHUNKS'):
             # message is in the format: <type>,<index>,<hash>,<ip>,<port>
@@ -69,9 +76,29 @@ def user(clientSocket, checkList, chunkList, listLock):
 
             # unlock the list
             listLock.release()
+        elif (cmd == 'WHERE_CHUNK'):
+            if (index not in chunkList.keys()):
+                # no available chunk in chunk list
+                response = f'CHUNK_LOCATION_UNKNOWN,{index}'
+                clientSocket.send(bytes(response, 'utf-8'))
+            else:
+                host_list = chunkList[index]
+                file_hash = host_list[0][0]
+                response = f'GET_CHUNK_FROM,{index},{file_hash}'
+                for (fh, ip, port) in host_list:
+                    response = response + f',{ip},{port}'
+    
+                clientSocket.send(bytes(response, 'utf-8'))
 
-        print(f'checkList: {checkList}')
-        print(f'chunkList: {chunkList}')
+            # log action
+            log_text = 'P2PTracker,' + response
+            logger.info(log_text)
+                
+        if (verbosity):
+            print(f'checkList: {checkList}')
+            print(f'chunkList: {chunkList}')
+        
+
         
 if __name__== "__main__":
     # no need of args? Add information about usage I guess?...
