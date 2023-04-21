@@ -4,10 +4,9 @@ import sys
 import argparse
 import logging
 import time
-import random
 
 # used to enable debugging print statements
-verbosity = 1
+verbosity = 0
 
 logging.basicConfig(filename="logs.log", format="%(message)s", filemode="a")
 logger = logging.getLogger()
@@ -76,6 +75,7 @@ def user(clientSocket, checkList, chunkList, listLock):
 
             # unlock the list
             listLock.release()
+
         elif (cmd == 'WHERE_CHUNK'):
             if (index not in chunkList.keys()):
                 # no available chunk in chunk list
@@ -95,9 +95,11 @@ def user(clientSocket, checkList, chunkList, listLock):
             logger.info(log_text)
                 
         if (verbosity):
-            print(f'checkList: {checkList}')
-            print(f'chunkList: {chunkList}')
-        
+            pass
+            #print(f'checkList: {checkList}')
+            #print(f'chunkList: {chunkList}')
+
+    clientSocket.close()
 
         
 if __name__== "__main__":
@@ -106,24 +108,28 @@ if __name__== "__main__":
                                      P2P File Transfer System")
     args = parser.parse_args()
 
+    PORT = 5100
+
     # initialize server socket
     try:
         serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except:
         print("Socket creation failed")
         sys.stdout.flush()
+        sys.exit(1)
 
     # bind socket to localhost IP and Port 5100
     try:
-        serverSocket.bind(('', 5100))
+        serverSocket.bind(('localhost', PORT))
     except:
         print("Socket binding failed")
         sys.stdout.flush()
+        sys.exit(1)
     
     # start istening for incoming connections
     serverSocket.listen(3)
     if (verbosity):
-        print(f"Server started on port 5100. Accepting connections")
+        print(f"Server started on port {PORT}. Accepting connections")
 
     # create check list
     # { KEY(CHUNK INDEX) : [(FILE_HASH_1, CLIENT_1_IP, CLIENT_1_PORT), (FILE_HASH_2, CLIENT_2_IP, CLIENT_2_PORT)] }
@@ -150,4 +156,7 @@ if __name__== "__main__":
 
         if (verbosity):
             print('client thread started')
-        
+    
+    
+    serverSocket.close()
+
