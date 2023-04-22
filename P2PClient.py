@@ -46,18 +46,20 @@ def find_missing_chunk(NAME, PATH, clientSocket, NUM_CHUNKS, chunks_owned):
     search_chunk = {}
 
     # first find missing chunks and append to search_chunk dictionary if chunk is known in P2P Tracker
-    while True:
+    while len(chunks_owned) < NUM_CHUNKS:
         # go through each possible index
         for i in range(1, NUM_CHUNKS + 1):
             # check whether the chunk is already owned
             if (i not in chunks_owned):
                 # send query to P2P Tracker for info regarding missing chunk
                 cmd = f'WHERE_CHUNK,{i}'
-                print(f'sent info request for chunk_{i}')
                 clientSocket.send(bytes(cmd, 'utf-8'))
 
+                if (verbosity):
+                    print(f'sent info request for chunk_{i}')
+
                 # log action
-                logger.info(f'{NAME},cmd')
+                logger.info(f'{NAME},{cmd}')
 
                 # get query response from P2P Tracker
                 response = clientSocket.recv(1024)
@@ -92,7 +94,7 @@ def find_missing_chunk(NAME, PATH, clientSocket, NUM_CHUNKS, chunks_owned):
             except:
                 print("Failed to create socket for chunk request (i.e. tempSocket)")
 
-            # connect to corresponding peer suing IP and PORT provided
+            # connect to corresponding peer using IP and PORT provided
             try:
                 print(f'Attempting connection to {search_IP} on port {search_PORT}')
                 tempSocket.connect((search_IP, int(search_PORT)))
@@ -101,25 +103,29 @@ def find_missing_chunk(NAME, PATH, clientSocket, NUM_CHUNKS, chunks_owned):
                 tempSocket.close()
                 continue
             
-            # send request chunk command
+            # create request string with proper format
             cmd = f'REQUEST_CHUNK,{index}'
+            # log action
+            logger.info(f'{NAME},{cmd},{search_IP},{search_PORT}')
+            # send chunk request
             tempSocket.send(bytes(cmd, 'utf-8'))
             
-            print('chunk request sent')
-
-            # log action
-            logger.info(f'{NAME},{cmd}')
+            # debug print 
+            if (verbosity):
+                print('chunk request sent')
 
             # receive all the chunk data and store in a file
             with open(f'{PATH}/chunk_{index}', 'ab') as writer:
                 data = tempSocket.recv(1024)
                 while (data != b''):
-                    print(f'writing data: {data}')
+                    if (verbosity):
+                        print(f'received {len(data)} bytes of data')
                     writer.write(data)
                     data = tempSocket.recv(1024)
 
             # update P2P Tracker by sending a local chunk command
             cmd = f'LOCAL_CHUNKS,{index},{file_hash},{IP_ADDR},{MY_PORT}'
+            clientSocket.send(bytes(cmd, 'utf-8'))
 
             # log action
             logger.info(f'{NAME},{cmd}')
@@ -168,14 +174,14 @@ if __name__== "__main__":
         clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # second socket is to connect to peers for a file transfer
         peerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    except socket.err as err:
+    except socket.error as err:
         print("Socket creation failed")
         sys.stdout.flush()
 
     # connect to P2PTracker++ server to start P2P File Transfers
     try:
         clientSocket.connect((HOST, PORT))
-    except socket.err as err:
+    except socket.error as err:
         print("Connection to server was unsuccesful")
         sys.stdout.flush()
     
@@ -250,7 +256,7 @@ if __name__== "__main__":
         if (request[0] == 'REQUEST_CHUNK'):
             with open(f'{PATH}/chunk_{request[1]}', 'rb') as reader:
                 while True:
-                    data = reader.read(1024)
+                    data = reader.read()
                     if (data == b''):
                         break
                     transmitSocket.send(data)

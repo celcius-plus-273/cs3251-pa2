@@ -1,5 +1,0 @@
-0,chunky
-5,stinky
-12,mimi
-25,stella
-4,LASTCHUNK
